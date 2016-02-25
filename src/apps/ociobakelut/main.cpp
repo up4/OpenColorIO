@@ -53,7 +53,7 @@ parse_end_args(int argc, const char *argv[])
 }
 
 OCIO::GroupTransformRcPtr
-parse_luts(int argc, const char *argv[]);
+parse_luts(int argc, const char *argv[], bool verbose);
 
 int main (int argc, const char* argv[])
 {
@@ -88,7 +88,7 @@ int main (int argc, const char* argv[])
     
     std::string formatstr = formats.str();
     
-    std::string dummystr;
+    std::string dummystr, dummystr2;
     float dummyf1, dummyf2, dummyf3;
     
     ArgParse ap;
@@ -108,6 +108,7 @@ int main (int argc, const char* argv[])
                "--iconfig %s", &inputconfig, "Input .ocio configuration file (default: $OCIO)\n",
                "<SEPARATOR>", "Config-Free LUT Baking",
                "<SEPARATOR>", "    (all options can be specified multiple times, each is applied in order)",
+               "--cst %s %s", &dummystr, &dummystr2, "Forward direction Input/Output OCIO colorspace transform (requires \"iconfig\")",
                "--lut %s", &dummystr, "Specify a LUT (forward direction)",
                "--invlut %s", &dummystr, "Specify a LUT (inverse direction)",
                "--slope %f %f %f", &dummyf1, &dummyf2, &dummyf3, "slope",
@@ -153,14 +154,29 @@ int main (int argc, const char* argv[])
     }
     
     // Create the OCIO processor for the specified transform.
-    OCIO::ConstConfigRcPtr config;
+    OCIO::ConfigRcPtr config;
+    if(!inputconfig.empty())
+    {
+        if(!usestdout && verbose)
+            std::cout << "[OpenColorIO INFO]: Loading " << inputconfig << std::endl;
+        config = OCIO::Config::CreateFromFile(inputconfig.c_str())->createEditableCopy();
+    }
+    else if(getenv("OCIO"))
+    {
+        if(!usestdout && verbose)
+            std::cout << "[OpenColorIO INFO]: Loading $OCIO " << getenv("OCIO") << std::endl;
+        config = OCIO::Config::CreateFromEnv()->createEditableCopy();
+    } else {        if(!usestdout && verbose)
+            std::cout << "[OpenColorIO INFO]: Creating empty config " << std::endl;
+        config = OCIO::Config::Create();
+    }
     
     
     OCIO::GroupTransformRcPtr groupTransform;
     
     try
     {
-        groupTransform = parse_luts(argc, argv);
+        groupTransform = parse_luts(argc, argv, verbose);
     }
     catch(const OCIO::Exception & e)
     {
@@ -211,19 +227,18 @@ int main (int argc, const char* argv[])
             return 1;
         }
         
-        OCIO::ConfigRcPtr editableConfig = OCIO::Config::Create();
         
         OCIO::ColorSpaceRcPtr inputColorSpace = OCIO::ColorSpace::Create();
         inputspace = "RawInput";
         inputColorSpace->setName(inputspace.c_str());
-        editableConfig->addColorSpace(inputColorSpace);
+        config->addColorSpace(inputColorSpace);
         
         OCIO::ColorSpaceRcPtr outputColorSpace = OCIO::ColorSpace::Create();
         outputspace = "ProcessedOutput";
         outputColorSpace->setName(outputspace.c_str());
-        
         outputColorSpace->setTransform(groupTransform,
-            OCIO::COLORSPACE_DIR_FROM_REFERENCE);
+                                       OCIO::COLORSPACE_DIR_FROM_REFERENCE);
+        config->addColorSpace(outputColorSpace);
         
         if(verbose)
         {
@@ -231,9 +246,6 @@ int main (int argc, const char* argv[])
             std::cout << *groupTransform;
             std::cout << "\n";
         }
-        
-        editableConfig->addColorSpace(outputColorSpace);
-        config = editableConfig;
     }
     else
     {
@@ -256,26 +268,6 @@ int main (int argc, const char* argv[])
         {
             std::cerr << "\nERROR: You must specify the lut format using --format.\n\n";
             std::cerr << "See --help for more info." << std::endl;
-            return 1;
-        }
-        
-        if(!inputconfig.empty())
-        {
-            if(!usestdout && verbose)
-                std::cout << "[OpenColorIO INFO]: Loading " << inputconfig << std::endl;
-            config = OCIO::Config::CreateFromFile(inputconfig.c_str());
-        }
-        else if(getenv("OCIO"))
-        {
-            if(!usestdout && verbose)
-                std::cout << "[OpenColorIO INFO]: Loading $OCIO " << getenv("OCIO") << std::endl;
-            config = OCIO::Config::CreateFromEnv();
-        }
-        else
-        {
-            std::cerr << "ERROR: You must specify an input ocio configuration ";
-            std::cerr << "(either with --iconfig or $OCIO).\n\n";
-            ap.usage ();
             return 1;
         }
     }
@@ -409,7 +401,7 @@ int main (int argc, const char* argv[])
 // resulting in an invalid (or at least undesired) scale value.
 
 OCIO::GroupTransformRcPtr
-parse_luts(int argc, const char *argv[])
+parse_luts(int argc, const char *argv[], bool verbose)
 {
     OCIO::GroupTransformRcPtr groupTransform = OCIO::GroupTransform::Create();
     
@@ -417,7 +409,25 @@ parse_luts(int argc, const char *argv[])
     {
         std::string arg(argv[i]);
         
-        if(arg == "--lut" || arg == "-lut")
+        if(arg == "--cst" || arg == "-cst")
+        {
+            if(i+2>=argc)
+            {
+                throw OCIO::Exception("Error parsing --cst. Invalid num args");
+            }
+            OCIO::ColorSpaceTransformRcPtr t = OCIO::ColorSpaceTransform::Create();
+            t->setSrc(argv[i+1]);
+            t->setDst(argv[i+2]);
+            t->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
+            groupTransform->push_back(t);
+            
+            if(verbose) {
+                std::cout << "[OpenColorIO INFO]: Transforms from '" << argv[i+1] << "' to '" << argv[i+2] << "'" << std::endl;
+            }
+            
+            i += 2;
+        }
+        else if(arg == "--lut" || arg == "-lut")
         {
             if(i+1>=argc)
             {
