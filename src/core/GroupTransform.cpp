@@ -156,7 +156,14 @@ OCIO_NAMESPACE_ENTER
         {
             if(i!=groupTransform.size()-1) os << "\n";
             ConstTransformRcPtr transform = groupTransform.getTransform(i);
-            os << "\t" << *transform;
+            try
+            {
+                os << "\t" << *transform;
+            }
+            catch(Exception & e)
+            {
+                os << "\t error trying to print transform #" << std::to_string(i);
+            }
         }
         return os;
     }

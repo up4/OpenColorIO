@@ -357,7 +357,7 @@ OCIO_NAMESPACE_ENTER
     std::ostream& operator<< (std::ostream& os, const MatrixTransform& t)
     {
         os << "<MatrixTransform ";
-        os << "direction=" << TransformDirectionToString(t.getDirection()) << ", ";
+        os << "direction=" << TransformDirectionToString(t.getDirection());
         os << ">\n";
         return os;
     }

@@ -147,10 +147,10 @@ OCIO_NAMESPACE_ENTER
     std::ostream& operator<< (std::ostream& os, const LookTransform& t)
     {
         os << "<LookTransform ";
+        os << "direction=" << TransformDirectionToString(t.getDirection()) << ", ";
         os << "src=" << t.getSrc() << ", ";
         os << "dst=" << t.getDst() << ", ";
-        os << "looks=" << t.getLooks() << ", ";
-        os << "direction=" << TransformDirectionToString(t.getDirection()) << ", ";
+        os << "looks=" << t.getLooks();
         os << ">\n";
         return os;
     }
